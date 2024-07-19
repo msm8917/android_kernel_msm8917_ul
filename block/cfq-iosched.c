@@ -41,6 +41,10 @@ static const int cfq_target_latency = HZ * 3/10; /* 300 ms */
 static const int cfq_hist_divisor = 4;
 static int cfq_max_async_dispatch = 4;
 
+/* Tunes from Pixel 4 */
+extern struct blkcg *blkcg_bg;
+/* Tunes from Pixel 4 */
+
 /*
  * offset from end of service tree
  */
@@ -1565,6 +1569,46 @@ static void cfq_pd_init(struct blkcg_gq *blkg)
 
 static void cfq_pd_offline(struct blkcg_gq *blkg)
 {
+
+	struct cfq_group *cfqg = pd_to_cfqg(pd);
+	struct cfq_group_data *cgd = blkcg_to_cfqgd(pd->blkg->blkcg);
+
+/* Tunes from Pixel 4 */
+	if (pd->blkg->blkcg == &blkcg_root) {
+		cgd->weight = 1000;
+		cgd->group_idle = 2000 * NSEC_PER_USEC;
+	} else if (pd->blkg->blkcg == blkcg_bg) {
+		cgd->weight = 200;
+		cgd->group_idle = 0;
+	}
+/* Tunes from Pixel 4 */
+
+	cfqg->weight = cgd->weight;
+	cfqg->leaf_weight = cgd->leaf_weight;
+	cfqg->group_idle = cgd->group_idle;
+}
+
+static void cfq_pd_offline(struct blkg_policy_data *pd)
+{
+	struct cfq_group *cfqg = pd_to_cfqg(pd);
+	int i;
+
+	for (i = 0; i < IOPRIO_BE_NR; i++) {
+		if (cfqg->async_cfqq[0][i]) {
+			cfq_put_queue(cfqg->async_cfqq[0][i]);
+			cfqg->async_cfqq[0][i] = NULL;
+		}
+		if (cfqg->async_cfqq[1][i]) {
+			cfq_put_queue(cfqg->async_cfqq[1][i]);
+			cfqg->async_cfqq[1][i] = NULL;
+		}
+	}
+
+	if (cfqg->async_idle_cfqq) {
+		cfq_put_queue(cfqg->async_idle_cfqq);
+		cfqg->async_idle_cfqq = NULL;
+	}
+
 	/*
 	 * @blkg is going offline and will be ignored by
 	 * blkg_[rw]stat_recursive_sum().  Transfer stats to the parent so
